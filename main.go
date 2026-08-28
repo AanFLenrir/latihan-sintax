@@ -8,6 +8,11 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+
+	// Pastikan nama modul ini sesuai dengan yang ada di go.mod Anda
+	"latihan-sintaks/app/repository"
+	"latihan-sintaks/config"
+	"latihan-sintaks/database"
 )
 
 var metodeBerbody = map[string]bool{
@@ -27,6 +32,16 @@ func requireJSON(c *fiber.Ctx) error {
 }
 
 func main() {
+	// 1. Muat variabel .env dan sambungkan ke PostgreSQL
+	config.LoadEnv()
+	pool := database.ConnectPostgres()
+	defer pool.Close()
+
+	// 2. Rakit Repository dan Handler untuk Student
+	studentRepo := repository.NewStudentRepository(pool)
+	studentHandler := NewStudentHandler(studentRepo)
+
+	// 3. Konfigurasi Fiber
 	app := fiber.New(fiber.Config{
 		AppName: "REST API Students - Tugas Mandiri",
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -46,16 +61,31 @@ func main() {
 	}))
 
 	api := app.Group("/api/v1")
-	
-	// Grup khusus /students
-	s := api.Group("/students", requireJSON)
-	s.Get("/", listStudents)
-	s.Get("/:id", getStudent)
-	s.Post("/", createStudent)
-	s.Put("/:id", replaceStudent)
-	s.Patch("/:id", patchStudent)
-	s.Delete("/:id", deleteStudent)
 
+	// Endpoint Health Check yang ikut memeriksa kondisi basis data
+	api.Get("/health", func(c *fiber.Ctx) error {
+		if err := pool.Ping(c.Context()); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Basis data terputus",
+			})
+		}
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"status":  "ok",
+			"message": "Layanan dan basis data berjalan normal",
+		})
+	})
+
+	// 4. Daftarkan Rute khusus /students
+	s := api.Group("/students", requireJSON)
+	s.Get("/", studentHandler.List)
+	s.Get("/:id", studentHandler.Get)
+	s.Post("/", studentHandler.Create)
+	s.Put("/:id", studentHandler.Replace)
+	s.Patch("/:id", studentHandler.Patch)
+	s.Delete("/:id", studentHandler.Delete)
+
+	// Fallback jika rute tidak ditemukan
 	app.Use(func(c *fiber.Ctx) error {
 		return fail(c, fiber.StatusNotFound, "endpoint tidak ditemukan")
 	})

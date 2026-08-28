@@ -1,15 +1,18 @@
-package main
+package model
+
+import "time"
 
 // Entitas utama
 type Student struct {
-	ID       int     `json:"id"`
-	NIM      string  `json:"nim"`
-	Name     string  `json:"name"`
-	Grade    float64 `json:"grade"`
-	IsActive bool    `json:"is_active"`
+	ID        int       `json:"id"`
+	NIM       string    `json:"nim"`
+	Name      string    `json:"name"`
+	Grade     float64   `json:"grade"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
-// POST — semua field wajib
+// POST — request pembuatan student baru
 type CreateStudentRequest struct {
 	NIM      string  `json:"nim"`
 	Name     string  `json:"name"`
@@ -17,7 +20,7 @@ type CreateStudentRequest struct {
 	IsActive bool    `json:"is_active"`
 }
 
-// PUT — seluruh isi diganti, semua wajib
+// PUT — seluruh isi diganti
 type ReplaceStudentRequest struct {
 	NIM      string  `json:"nim"`
 	Name     string  `json:"name"`
@@ -55,5 +58,10 @@ type ListQuery struct {
 	Search   string
 	Sort     string
 	Order    string
-	IsActive *bool // Filter berdasarkan status aktif
+	IsActive *bool
+}
+
+// Offset menghitung baris yang dilewati untuk paginasi SQL
+func (q ListQuery) Offset() int {
+	return (q.Page - 1) * q.Limit
 }
