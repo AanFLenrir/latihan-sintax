@@ -1,95 +1,66 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
-	"strings"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/requestid"
-
-	// Pastikan nama modul ini sesuai dengan yang ada di go.mod Anda
+	"github.com/joho/godotenv"
 	"latihan-sintaks/app/repository"
+	"latihan-sintaks/app/service"
 	"latihan-sintaks/config"
 	"latihan-sintaks/database"
+	"latihan-sintaks/middleware"
+	"latihan-sintaks/route"
 )
 
-var metodeBerbody = map[string]bool{
-	fiber.MethodPost:  true,
-	fiber.MethodPut:   true,
-	fiber.MethodPatch: true,
-}
-
-func requireJSON(c *fiber.Ctx) error {
-	if metodeBerbody[c.Method()] {
-		ct := c.Get("Content-Type")
-		if !strings.HasPrefix(ct, fiber.MIMEApplicationJSON) {
-			return fail(c, fiber.StatusUnsupportedMediaType, "Content-Type harus application/json")
-		}
-	}
-	return c.Next()
-}
-
 func main() {
-	// 1. Muat variabel .env dan sambungkan ke PostgreSQL
-	config.LoadEnv()
-	pool := database.ConnectPostgres()
-	defer pool.Close()
+	// 1. Muat variabel environment
+	if err := godotenv.Load(); err != nil {
+		log.Println("Peringatan: file .env tidak ditemukan, menggunakan variabel sistem")
+	}
 
-	// 2. Rakit Repository dan Handler untuk Student
-	studentRepo := repository.NewStudentRepository(pool)
-	studentHandler := NewStudentHandler(studentRepo)
+	// 2. Hubungkan ke Database
+	db := database.ConnectPostgres()
+	defer db.Close() // <-- Sudah diperbaiki: pgxpool.Close() tidak menerima context
 
-	// 3. Konfigurasi Fiber
-	app := fiber.New(fiber.Config{
-		AppName: "REST API Students - Tugas Mandiri",
-		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			status := fiber.StatusInternalServerError
-			pesan := "terjadi kesalahan pada server"
-			if e, ok := err.(*fiber.Error); ok {
-				status = e.Code
-				pesan = e.Message
-			}
-			return fail(c, status, pesan)
-		},
-	})
+	// 3. Inisialisasi Repository dan Service
+	studentRepo := repository.NewStudentRepository(db)
+	studentService := service.NewStudentService(studentRepo)
 
-	app.Use(requestid.New())
-	app.Use(logger.New(logger.Config{
-		Format: "[${time}] ${locals:requestid} ${method} ${path} ${status} ${latency}\n",
-	}))
+	// 4. Inisialisasi Logger
+	logFile := config.SetupLogger()
+	defer logFile.Close()
 
-	api := app.Group("/api/v1")
+	// 5. Inisialisasi Fiber App
+	app := config.NewFiberApp()
 
-	// Endpoint Health Check yang ikut memeriksa kondisi basis data
-	api.Get("/health", func(c *fiber.Ctx) error {
-		if err := pool.Ping(c.Context()); err != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Basis data terputus",
-			})
+	// 6. Pasang Middleware dan Rute
+	middleware.Setup(app, logFile)
+	route.Setup(app, studentService)
+	config.HandleNotFound(app)
+
+	// 7. Jalankan Server dengan Graceful Shutdown
+	go func() {
+		if err := app.Listen(":3000"); err != nil {
+			log.Panic(err)
 		}
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status":  "ok",
-			"message": "Layanan dan basis data berjalan normal",
-		})
-	})
+	}()
 
-	// 4. Daftarkan Rute khusus /students
-	s := api.Group("/students", requireJSON)
-	s.Get("/", studentHandler.List)
-	s.Get("/:id", studentHandler.Get)
-	s.Post("/", studentHandler.Create)
-	s.Put("/:id", studentHandler.Replace)
-	s.Patch("/:id", studentHandler.Patch)
-	s.Delete("/:id", studentHandler.Delete)
+	// Menunggu sinyal interupsi (Ctrl+C)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
 
-	// Fallback jika rute tidak ditemukan
-	app.Use(func(c *fiber.Ctx) error {
-		return fail(c, fiber.StatusNotFound, "endpoint tidak ditemukan")
-	})
+	log.Println("Mematikan server...")
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	fmt.Println("Server berjalan di http://localhost:3000")
-	log.Fatal(app.Listen(":3000"))
+	if err := app.Shutdown(); err != nil {
+		log.Fatal("Server dipaksa mati:", err)
+	}
+	log.Println("Server berhasil dimatikan")
 }
