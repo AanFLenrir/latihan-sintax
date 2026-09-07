@@ -25,11 +25,15 @@ func main() {
 
 	// 2. Hubungkan ke Database
 	db := database.ConnectPostgres()
-	defer db.Close() // <-- Sudah diperbaiki: pgxpool.Close() tidak menerima context
+	defer db.Close()
 
-	// 3. Inisialisasi Repository dan Service
+	// 3. Inisialisasi Repository dan Service (Student & Auth)
 	studentRepo := repository.NewStudentRepository(db)
 	studentService := service.NewStudentService(studentRepo)
+
+	userRepo := repository.NewUserRepository(db)
+	tokenRepo := repository.NewTokenRepository(db)
+	authService := service.NewAuthService(userRepo, tokenRepo)
 
 	// 4. Inisialisasi Logger
 	logFile := config.SetupLogger()
@@ -40,7 +44,11 @@ func main() {
 
 	// 6. Pasang Middleware dan Rute
 	middleware.Setup(app, logFile)
+	
+	// Daftarkan Rute Auth & Rute Student
+	route.SetupAuthRoutes(app, authService)
 	route.Setup(app, studentService)
+
 	config.HandleNotFound(app)
 
 	// 7. Jalankan Server dengan Graceful Shutdown

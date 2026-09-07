@@ -1,0 +1,42 @@
+package repository
+
+import (
+	"context"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type TokenRepository interface {
+	Save(ctx context.Context, userID int, token string) error
+	FindByToken(ctx context.Context, token string) (int, error)
+	Delete(ctx context.Context, token string) error
+}
+
+type tokenRepository struct {
+	db *pgxpool.Pool
+}
+
+func NewTokenRepository(db *pgxpool.Pool) TokenRepository {
+	return &tokenRepository{db: db}
+}
+
+func (r *tokenRepository) Save(ctx context.Context, userID int, token string) error {
+	query := `INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+	_, err := r.db.Exec(ctx, query, userID, token, expiresAt)
+	return err
+}
+
+func (r *tokenRepository) FindByToken(ctx context.Context, token string) (int, error) {
+	query := `SELECT user_id FROM refresh_tokens WHERE token = $1 AND expires_at > NOW()`
+	var userID int
+	err := r.db.QueryRow(ctx, query, token).Scan(&userID)
+	return userID, err
+}
+
+func (r *tokenRepository) Delete(ctx context.Context, token string) error {
+	query := `DELETE FROM refresh_tokens WHERE token = $1`
+	_, err := r.db.Exec(ctx, query, token)
+	return err
+}
