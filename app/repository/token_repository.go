@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,6 +20,21 @@ type tokenRepository struct {
 }
 
 func NewTokenRepository(db *pgxpool.Pool) TokenRepository {
+	// Hapus tabel lama kalau ada, lalu buat ulang dari nol supaya strukturnya bersih
+	dropQuery := `DROP TABLE IF EXISTS refresh_tokens CASCADE;`
+	_, _ = db.Exec(context.Background(), dropQuery)
+
+	createQuery := `
+	CREATE TABLE refresh_tokens (
+		id SERIAL PRIMARY KEY,
+		user_id INT NOT NULL,
+		token TEXT NOT NULL UNIQUE,
+		expires_at TIMESTAMP NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);`
+	_, _ = db.Exec(context.Background(), createQuery)
+
 	return &tokenRepository{db: db}
 }
 
@@ -32,7 +49,13 @@ func (r *tokenRepository) FindByToken(ctx context.Context, token string) (int, e
 	query := `SELECT user_id FROM refresh_tokens WHERE token = $1 AND expires_at > NOW()`
 	var userID int
 	err := r.db.QueryRow(ctx, query, token).Scan(&userID)
-	return userID, err
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, errors.New("refresh token tidak valid atau kadaluarsa")
+		}
+		return 0, err
+	}
+	return userID, nil
 }
 
 func (r *tokenRepository) Delete(ctx context.Context, token string) error {

@@ -1,63 +1,61 @@
 package helper
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// Claims dipusatkan di sini
 type Claims struct {
-	UserID   int    `json:"userId"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func GenerateAccessToken(userId int, username string, role string) (string, error) {
-	secret := os.Getenv("JWT_SECRET")
-	ttlMin, _ := strconv.Atoi(os.Getenv("JWT_ACCESS_TTL_MINUTES"))
-	if ttlMin == 0 {
-		ttlMin = 15
-	}
-
+// Digunakan oleh auth_service.go
+func GenerateAccessToken(username, role string) (string, error) {
+	secret := []byte(os.Getenv("JWT_SECRET"))
 	claims := Claims{
-		UserID:   userId,
 		Username: username,
 		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(ttlMin) * time.Minute)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "praktikum-backend",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+			Issuer:    os.Getenv("JWT_ISSUER"),
 		},
 	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(secret))
+	return token.SignedString(secret)
 }
 
-func ParseToken(tokenStr string) (*Claims, error) {
-	secret := os.Getenv("JWT_SECRET")
+// Digunakan oleh auth_service.go
+func GenerateRefreshToken() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
 
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		// Mencegah Algorithm Confusion (alg: none)
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("algoritma tidak diharapkan: %v", t.Header["alg"])
-		}
-		return []byte(secret), nil
+// Digunakan oleh middleware/auth.go
+func ParseToken(tokenStr string) (*Claims, error) {
+	secret := []byte(os.Getenv("JWT_SECRET"))
+	claims := &Claims{}
+	
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
+		return secret, nil
 	})
 
 	if err != nil {
 		return nil, err
 	}
-
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
+	if !token.Valid {
 		return nil, errors.New("token tidak valid")
 	}
-
+	
 	return claims, nil
 }

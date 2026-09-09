@@ -11,6 +11,9 @@ import (
 type AuthService interface {
 	Register(ctx context.Context, req model.RegisterRequest) (*model.UserResponse, error)
 	Login(ctx context.Context, req model.LoginRequest) (*model.TokenResponse, error)
+	Refresh(ctx context.Context, refreshToken string) (*model.TokenResponse, error)
+	Logout(ctx context.Context, refreshToken string) error
+	GetMe(ctx context.Context, username string) (*model.UserResponse, error)
 }
 
 type authService struct {
@@ -37,9 +40,8 @@ func (s *authService) Register(ctx context.Context, req model.RegisterRequest) (
 		Email:    req.Email,
 	}
 
-	err = s.userRepo.Create(ctx, user, hashedPassword)
-	if err != nil {
-		return nil, errors.New("username atau email sudah terdaftar")
+	if err := s.userRepo.Create(ctx, user, hashedPassword); err != nil {
+		return nil, errors.New("gagal menyimpan user atau username sudah terdaftar")
 	}
 
 	return user, nil
@@ -48,29 +50,66 @@ func (s *authService) Register(ctx context.Context, req model.RegisterRequest) (
 func (s *authService) Login(ctx context.Context, req model.LoginRequest) (*model.TokenResponse, error) {
 	user, err := s.userRepo.FindByUsername(ctx, req.Username)
 	if err != nil {
-		helper.VerifyDummyPassword(req.Password)
 		return nil, errors.New("username atau password salah")
 	}
 
-	if !helper.CheckPasswordHash(req.Password, user.Password) {
+	if !helper.VerifyPassword(user.Password, req.Password) {
 		return nil, errors.New("username atau password salah")
 	}
 
-	accessToken, err := helper.GenerateAccessToken(user.ID, user.Username, user.Role)
+	accessToken, err := helper.GenerateAccessToken(user.Username, user.Role)
 	if err != nil {
 		return nil, errors.New("gagal membuat access token")
 	}
 
-	refreshToken := helper.GenerateRandomString(32)
-	err = s.tokenRepo.Save(ctx, user.ID, refreshToken)
+	refreshToken, err := helper.GenerateRefreshToken()
 	if err != nil {
+		return nil, errors.New("gagal membuat refresh token")
+	}
+
+	if err := s.tokenRepo.Save(ctx, user.ID, refreshToken); err != nil {
 		return nil, errors.New("gagal menyimpan refresh token")
 	}
 
 	return &model.TokenResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    900,
+	}, nil
+}
+
+func (s *authService) Refresh(ctx context.Context, refreshToken string) (*model.TokenResponse, error) {
+	userID, err := s.tokenRepo.FindByToken(ctx, refreshToken)
+	if err != nil {
+		return nil, errors.New("refresh token tidak valid")
+	}
+
+	_ = s.tokenRepo.Delete(ctx, refreshToken)
+
+	newAccessToken, _ := helper.GenerateAccessToken("user", "user")
+	newRefreshToken, _ := helper.GenerateRefreshToken()
+
+	_ = s.tokenRepo.Save(ctx, userID, newRefreshToken)
+
+	return &model.TokenResponse{
+		AccessToken:  newAccessToken,
+		RefreshToken: newRefreshToken,
+	}, nil
+}
+
+func (s *authService) Logout(ctx context.Context, refreshToken string) error {
+	return s.tokenRepo.Delete(ctx, refreshToken)
+}
+
+func (s *authService) GetMe(ctx context.Context, username string) (*model.UserResponse, error) {
+	user, err := s.userRepo.FindByUsername(ctx, username)
+	if err != nil {
+		return nil, errors.New("user tidak ditemukan")
+	}
+
+	return &model.UserResponse{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
 	}, nil
 }
