@@ -9,7 +9,7 @@ type Student struct {
 	Name      string    `json:"name"`
 	Grade     float64   `json:"grade"`
 	IsActive  bool      `json:"is_active"`
-	OwnerID   int       `json:"owner_id"` // <- BARU: Kolom kepemilikan data
+	OwnerID   *int      `json:"owner_id"` // Diubah jadi pointer (*int) agar aman dan tidak error jika kosong/null
 	CreatedAt time.Time `json:"created_at"`
 }
 

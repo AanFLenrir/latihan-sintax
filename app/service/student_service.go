@@ -5,10 +5,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gofiber/fiber/v2"
 	"latihan-sintaks/app/model"
 	"latihan-sintaks/app/repository"
 	"latihan-sintaks/helper"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type StudentService struct {
@@ -58,7 +59,13 @@ func (s *StudentService) Get(c *fiber.Ctx) error {
 		return translateError(c, err, "gagal mengambil data mahasiswa")
 	}
 
-	if !CanAccessStudent(current, student.OwnerID, s.perms, "student:read:any") {
+	// Tangani pointer OwnerID dengan aman
+	var ownerID int
+	if student.OwnerID != nil {
+		ownerID = *student.OwnerID
+	}
+
+	if !CanAccessStudent(current, ownerID, s.perms, "student:read:any") {
 		return helper.Fail(c, fiber.StatusForbidden, "tidak berhak mengakses data mahasiswa ini")
 	}
 
@@ -84,12 +91,13 @@ func (s *StudentService) Create(c *fiber.Ctx) error {
 		return helper.FailValidation(c, errs)
 	}
 
+	userId := current.UserID
 	newStudent, err := s.repo.Create(ctx, model.Student{
 		Name:     strings.TrimSpace(req.Name),
 		NIM:      strings.TrimSpace(req.NIM),
 		Grade:    req.Grade,
 		IsActive: req.IsActive,
-		OwnerID:  current.UserID,
+		OwnerID:  &userId, // Gunakan pointer
 	})
 	if err != nil {
 		return translateError(c, err, "gagal menyimpan mahasiswa")
@@ -126,16 +134,24 @@ func (s *StudentService) Replace(c *fiber.Ctx) error {
 		return translateError(c, err, "gagal mengambil data mahasiswa")
 	}
 
-	if !CanAccessStudent(current, currentData.OwnerID, s.perms, "student:update:any") {
+	// Tangani pointer OwnerID dengan aman
+	var ownerID int
+	if currentData.OwnerID != nil {
+		ownerID = *currentData.OwnerID
+	}
+
+	if !CanAccessStudent(current, ownerID, s.perms, "student:update:any") {
 		return helper.Fail(c, fiber.StatusForbidden, "tidak berhak mengubah data mahasiswa ini")
 	}
 
+	userId := current.UserID
 	result, err := s.repo.Update(ctx, model.Student{
 		ID:       id,
 		Name:     strings.TrimSpace(req.Name),
 		NIM:      strings.TrimSpace(req.NIM),
 		Grade:    req.Grade,
 		IsActive: req.IsActive,
+		OwnerID:  &userId,
 	})
 	if err != nil {
 		return translateError(c, err, "gagal memperbarui mahasiswa")
@@ -167,12 +183,18 @@ func (s *StudentService) Patch(c *fiber.Ctx) error {
 		return helper.Fail(c, fiber.StatusBadRequest, "tidak ada field yang diubah")
 	}
 
-    currentData, err := s.repo.FindByID(ctx, id)
+	currentData, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return translateError(c, err, "gagal mengambil data mahasiswa")
 	}
 
-	if !CanAccessStudent(current, currentData.OwnerID, s.perms, "student:update:any") {
+	// Tangani pointer OwnerID dengan aman
+	var ownerID int
+	if currentData.OwnerID != nil {
+		ownerID = *currentData.OwnerID
+	}
+
+	if !CanAccessStudent(current, ownerID, s.perms, "student:update:any") {
 		return helper.Fail(c, fiber.StatusForbidden, "tidak berhak mengubah data mahasiswa ini")
 	}
 
