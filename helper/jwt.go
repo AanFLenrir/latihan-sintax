@@ -17,7 +17,37 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// Digunakan oleh auth_service.go
+// JWTManager membungkus konfigurasi pembuatan token
+type JWTManager struct {
+	secret    []byte
+	issuer    string
+	accessTTL time.Duration
+}
+
+// NewJWTManager adalah constructor untuk JWTManager (Dipanggil di main.go)
+func NewJWTManager(secret, issuer string, accessTTL time.Duration) *JWTManager {
+	return &JWTManager{
+		secret:    []byte(secret),
+		issuer:    issuer,
+		accessTTL: accessTTL,
+	}
+}
+
+// Generate (versi instance method dari JWTManager)
+func (m *JWTManager) Generate(username, role string) (string, error) {
+	claims := Claims{
+		Username: username,
+		Role:     role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.accessTTL)),
+			Issuer:    m.issuer,
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(m.secret)
+}
+
+// Digunakan oleh auth_service.go (Fungsi lama tetap dipertahankan)
 func GenerateAccessToken(username, role string) (string, error) {
 	secret := []byte(os.Getenv("JWT_SECRET"))
 	claims := Claims{

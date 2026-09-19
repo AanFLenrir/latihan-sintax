@@ -13,6 +13,7 @@ import (
 	"latihan-sintaks/app/service"
 	"latihan-sintaks/config"
 	"latihan-sintaks/database"
+	"latihan-sintaks/helper"
 	"latihan-sintaks/middleware"
 	"latihan-sintaks/route"
 )
@@ -27,22 +28,32 @@ func main() {
 	db := database.ConnectPostgres()
 	defer db.Close()
 
-	// 3. Inisialisasi Repository dan Service (Student & Auth)
+	// 3. Inisialisasi RoleRepository dan memuat PermissionSet (Wajib untuk Modul 6 RBAC)
+	roleRepo := repository.NewRoleRepository(db)
+	rawPermissions, err := roleRepo.LoadPermissions(context.Background())
+	if err != nil {
+		log.Fatalf("gagal memuat permission: %v", err)
+	}
+	permissions := helper.NewPermissionSet(rawPermissions)
+
+	// 4. Inisialisasi Repository dan Service (Student & Auth)
 	studentRepo := repository.NewStudentRepository(db)
-	studentService := service.NewStudentService(studentRepo)
+	studentService := service.NewStudentService(studentRepo, permissions)
 
 	userRepo := repository.NewUserRepository(db)
 	tokenRepo := repository.NewTokenRepository(db)
+	
+	// AuthService menggunakan 2 parameter sesuai konstruktor aslimu
 	authService := service.NewAuthService(userRepo, tokenRepo)
 
-	// 4. Inisialisasi Logger
+	// 5. Inisialisasi Logger
 	logFile := config.SetupLogger()
 	defer logFile.Close()
 
-	// 5. Inisialisasi Fiber App
+	// 6. Inisialisasi Fiber App
 	app := config.NewFiberApp()
 
-	// 6. Pasang Middleware dan Rute
+	// 7. Pasang Middleware dan Rute
 	middleware.Setup(app, logFile)
 	
 	// Daftarkan Rute Auth & Rute Student
@@ -51,7 +62,7 @@ func main() {
 
 	config.HandleNotFound(app)
 
-	// 7. Jalankan Server dengan Graceful Shutdown
+	// 8. Jalankan Server dengan Graceful Shutdown
 	go func() {
 		if err := app.Listen(":3000"); err != nil {
 			log.Panic(err)

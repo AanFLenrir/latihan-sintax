@@ -13,16 +13,38 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-type TokenResponse struct {
+// Ubah nama menjadi TokenPair agar sesuai dengan kembalian AuthService
+type TokenPair struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
+	ExpiresIn    int    `json:"expires_in"` // detik
 }
 
-type RefreshTokenRequest struct {
+// Ubah nama menjadi RefreshRequest agar sesuai dengan AuthService
+type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
+
+// BARU: RefreshToken adalah row pada table refresh_tokens di database
+type RefreshToken struct {
+	ID         int64
+	UserID     int
+	TokenHash  string
+	ExpiresAt  time.Time
+	RevokedAt  *time.Time
+	CreatedAt  time.Time
+}
+
+// BARU & SANGAT PENTING: AuthUser adalah identitas yang dibawa access token
+// Ini yang tadi dicari oleh fungsi CanAccessStudent dan bikin error merah!
+type AuthUser struct {
+	UserID   int    `json:"user_id"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
+}
+
+// --- Tambahan dari kodemu (tetap dipertahankan jika dipakai di handler) ---
 
 type UserResponse struct {
 	ID        int       `json:"id"`

@@ -10,8 +10,8 @@ import (
 
 type AuthService interface {
 	Register(ctx context.Context, req model.RegisterRequest) (*model.UserResponse, error)
-	Login(ctx context.Context, req model.LoginRequest) (*model.TokenResponse, error)
-	Refresh(ctx context.Context, refreshToken string) (*model.TokenResponse, error)
+	Login(ctx context.Context, req model.LoginRequest) (*model.TokenPair, error) // <- BERUBAH
+	Refresh(ctx context.Context, refreshToken string) (*model.TokenPair, error)  // <- BERUBAH
 	Logout(ctx context.Context, refreshToken string) error
 	GetMe(ctx context.Context, username string) (*model.UserResponse, error)
 }
@@ -47,7 +47,7 @@ func (s *authService) Register(ctx context.Context, req model.RegisterRequest) (
 	return user, nil
 }
 
-func (s *authService) Login(ctx context.Context, req model.LoginRequest) (*model.TokenResponse, error) {
+func (s *authService) Login(ctx context.Context, req model.LoginRequest) (*model.TokenPair, error) {
 	user, err := s.userRepo.FindByUsername(ctx, req.Username)
 	if err != nil {
 		return nil, errors.New("username atau password salah")
@@ -71,13 +71,15 @@ func (s *authService) Login(ctx context.Context, req model.LoginRequest) (*model
 		return nil, errors.New("gagal menyimpan refresh token")
 	}
 
-	return &model.TokenResponse{
+	// <- BERUBAH: Menggunakan model.TokenPair
+	return &model.TokenPair{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		TokenType:    "Bearer",
 	}, nil
 }
 
-func (s *authService) Refresh(ctx context.Context, refreshToken string) (*model.TokenResponse, error) {
+func (s *authService) Refresh(ctx context.Context, refreshToken string) (*model.TokenPair, error) {
 	userID, err := s.tokenRepo.FindByToken(ctx, refreshToken)
 	if err != nil {
 		return nil, errors.New("refresh token tidak valid")
@@ -90,9 +92,11 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*model.
 
 	_ = s.tokenRepo.Save(ctx, userID, newRefreshToken)
 
-	return &model.TokenResponse{
+	// <- BERUBAH: Menggunakan model.TokenPair
+	return &model.TokenPair{
 		AccessToken:  newAccessToken,
 		RefreshToken: newRefreshToken,
+		TokenType:    "Bearer",
 	}, nil
 }
 
