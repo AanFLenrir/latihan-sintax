@@ -1,0 +1,21 @@
+HASIL UJI CONCURRENCY BATAS MAKSIMAL 20 PROYEK
+Kondisi Awal: Portofolio mahasiswa 37 memiliki tepat 18 proyek.
+Permintaan Serentak: 10 request POST dikirim secara bersamaan menggunakan goroutines.
+
+Rincian Hasil Setiap Request:
+Request #01 -> Status: 409, Durasi: 163.4873ms
+Request #02 -> Status: 201, Durasi: 6.0854ms
+Request #03 -> Status: 409, Durasi: 13.6315ms
+Request #04 -> Status: 409, Durasi: 67.9206ms
+Request #05 -> Status: 201, Durasi: 7.9962ms
+Request #06 -> Status: 409, Durasi: 14.8959ms
+Request #07 -> Status: 409, Durasi: 13.6315ms
+Request #08 -> Status: 409, Durasi: 15.4474ms
+Request #09 -> Status: 409, Durasi: 13.6035ms
+Request #10 -> Status: 409, Durasi: 11.9275ms
+
+Ringkasan:
+- Berhasil (HTTP 201 Created): 2 request (Ekspektasi: 2)
+- Ditolak (HTTP 409 PROJECT_LIMIT): 8 request (Ekspektasi: 8)
+- Jumlah Proyek Akhir di MongoDB: 20 (Ekspektasi: Tepat 20, Tidak Pernah 21)
+- Verifikasi Atomicity MongoDB: projects.19: {$exists: false} BERHASIL

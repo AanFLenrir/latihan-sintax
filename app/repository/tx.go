@@ -1,0 +1,75 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+	"math/rand/v2"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type TxManager struct {
+	pool        *pgxpool.Pool
+	maxAttempts int
+}
+
+func NewTxManager(pool *pgxpool.Pool) *TxManager {
+	return &TxManager{pool: pool, maxAttempts: 3}
+}
+
+// BUG FIX: Parameter 'fn' diubah dari func(tx pgx.Tx) menjadi func(tx DBTX)
+// agar sesuai dengan komentar dosen dan interface di service.
+func (m *TxManager) WithTx(ctx context.Context, fn func(tx DBTX) error) error {
+	var err error
+	for attempt := 1; attempt <= m.maxAttempts; attempt++ {
+		err = m.runOnce(ctx, fn)
+		if !isRetryable(err) {
+			return err
+		}
+
+		wait := time.Duration(attempt*20+rand.IntN(30)) * time.Millisecond
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+	return err
+}
+
+// WithTxOnce sama dengan WithTx, tetapi TIDAK PERNAH melakukan retry.
+//
+// Dipakai ketika fn memang harus melakukan sesuatu di luar database —
+// mengirim email, melakukan enqueue task — sambil memegang lock
+// di database. Melakukan retry fn berarti mengulang tindakan luar itu.
+// Tanggung jawab melakukan retry dipindahkan ke pemanggil: worker queue
+// sudah punya mekanisme retry sendiri, dan relay outbox akan melakukan retry
+// pada putaran berikutnya.
+func (m *TxManager) WithTxOnce(ctx context.Context, fn func(tx DBTX) error) error {
+	return m.runOnce(ctx, fn)
+}
+
+// BUG FIX: Parameter 'fn' di sini juga disesuaikan menjadi func(tx DBTX)
+func (m *TxManager) runOnce(ctx context.Context, fn func(tx DBTX) error) error {
+	tx, err := m.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("memulai transaction: %w", err)
+	}
+	// BUG FIX: Rollback SELALU dijadwalkan (dari langkah sebelumnya)
+	defer tx.Rollback(ctx)
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
+}
+
+func isRetryable(err error) bool {
+	code := pgErrorCode(err)
+	return code == codeSerializationFailure || code == codeDeadlockDetected
+}

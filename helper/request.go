@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"latihan-sintaks/app/model" // PASTIKAN INI SAMA DENGAN NAMA DI FILE go.mod
+	"latihan-fiber/app/model"
 )
 
 // RequestContext memberi timeout untuk setiap operasi database.
@@ -24,9 +24,8 @@ func ParamID(c *fiber.Ctx) (int, bool) {
 	return id, true
 }
 
-// Disesuaikan untuk pencarian/urutan tabel students
 var allowedSort = map[string]bool{
-	"id": true, "name": true, "nim": true, "created_at": true,
+	"id": true, "username": true, "email": true, "created_at": true,
 }
 
 // ParseListQuery membaca query string dan memberi nilai bawaan yang aman.

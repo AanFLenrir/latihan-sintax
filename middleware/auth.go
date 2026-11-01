@@ -1,46 +1,72 @@
 package middleware
 
 import (
+	"errors"
 	"strings"
-
-	"latihan-sintaks/helper"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"latihan-fiber/helper"
 )
 
-func AuthProtected() fiber.Handler {
+// RequireAuth memeriksa access token pada header Authorization.
+// Bila tokennya sah, identitas pemakai disimpan di Locals agar dapat
+// dibaca service tanpa memeriksa ulang.
+func RequireAuth(jwtManager *helper.JWTManager) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		authHeader := c.Get("Authorization")
-		if authHeader == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"success": false,
-				"message": "autentikasi diperlukan",
-			})
-		}
-
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"success": false,
-				"message": "format token tidak valid",
-			})
-		}
-
-		tokenStr := parts[1]
-		claims, err := helper.ParseToken(tokenStr)
+		token, err := bearerToken(c)
 		if err != nil {
-			msg := "access token tidak valid"
-			if strings.Contains(err.Error(), "expired") {
-				msg = "access token kedaluwarsa"
-			}
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"success": false,
-				"message": msg,
-			})
+			// WWW-Authenticate adalah header baku yang menyertai 401.
+			c.Set("WWW-Authenticate", `Bearer realm="api"`)
+			// DIUBAH: Hapus helper.Fail, pakai return helper.Unauthorized
+			return helper.Unauthorized("header Authorization tidak ada atau salah bentuk")
 		}
 
-		// Simpan informasi user ke context Fiber agar bisa diakses di handler
-		c.Locals("userInfo", claims)
+		authUser, err := jwtManager.Parse(token)
+		if err != nil {
+			c.Set("WWW-Authenticate", `Bearer realm="api"`)
+			if errors.Is(err, helper.ErrExpiredToken) {
+				return helper.Unauthorized("access token kedaluwarsa")
+			}
+			return helper.Unauthorized("access token tidak valid")
+		}
+
+		c.Locals(helper.LocalsAuthUser, authUser)
 		return c.Next()
 	}
+}
+
+func bearerToken(c *fiber.Ctx) (string, error) {
+	header := c.Get(fiber.HeaderAuthorization)
+	if header == "" {
+		return "", errors.New("header kosong")
+	}
+
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", errors.New("format bukan Bearer")
+	}
+
+	token := strings.TrimSpace(parts[1])
+	if token == "" {
+		return "", errors.New("token kosong")
+	}
+	return token, nil
+}
+
+// LoginRateLimiter membatasi jumlah percobaan login dari satu alamat IP.
+func LoginRateLimiter() fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:        5,
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			c.Set("Retry-After", "60")
+			// DIUBAH: Hapus helper.Fail, pakai helper.TooManyRequests
+			return helper.TooManyRequests("terlalu banyak percobaan login, coba lagi dalam satu menit")
+		},
+	})
 }

@@ -2,18 +2,24 @@ package model
 
 import "time"
 
+// RegisterRequest diberi tag validasi sesuai Langkah 6.
+// Perhatikan max=72 pada password untuk keamanan bcrypt.
 type RegisterRequest struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Username string `json:"username" validate:"required,min=3,max=30,username"`
+	Email    string `json:"email" validate:"required,email,max=120"`
+	Password string `json:"password" validate:"required,max=72,strongpassword"`
+	// TIDAK ADA field Role di sini.
 }
 
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string `json:"username" validate:"required"`
+	Password string `json:"password" validate:"required"`
 }
 
-// Ubah nama menjadi TokenPair agar sesuai dengan kembalian AuthService
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
 type TokenPair struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -21,43 +27,19 @@ type TokenPair struct {
 	ExpiresIn    int    `json:"expires_in"` // detik
 }
 
-// Ubah nama menjadi RefreshRequest agar sesuai dengan AuthService
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
-// BARU: RefreshToken adalah row pada table refresh_tokens di database
+// RefreshToken adalah row pada table refresh_tokens.
 type RefreshToken struct {
-	ID         int64
-	UserID     int
-	TokenHash  string
-	ExpiresAt  time.Time
-	RevokedAt  *time.Time
-	CreatedAt  time.Time
+	ID        int64
+	UserID    int
+	TokenHash string
+	ExpiresAt time.Time
+	RevokedAt *time.Time
+	CreatedAt time.Time
 }
 
-// BARU & SANGAT PENTING: AuthUser adalah identitas yang dibawa access token
-// Ini yang tadi dicari oleh fungsi CanAccessStudent dan bikin error merah!
+// AuthUser adalah identitas yang dibawa access token.
 type AuthUser struct {
 	UserID   int    `json:"user_id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
-}
-
-// --- Tambahan dari kodemu (tetap dipertahankan jika dipakai di handler) ---
-
-type UserResponse struct {
-	ID        int       `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-type UserInternal struct {
-	ID        int       `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	Password  string    `json:"password"`
-	Role      string    `json:"role"`
-	CreatedAt time.Time `json:"created_at"`
 }

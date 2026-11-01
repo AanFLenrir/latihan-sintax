@@ -1,0 +1,182 @@
+[
+  {
+    "id": "TC-01",
+    "endpoint": "/health",
+    "method": "GET",
+    "condition": "Kedua database (PostgreSQL \u0026 MongoDB) aktif",
+    "status": "PASS",
+    "http_code": 200,
+    "details": "Health check memverifikasi koneksi PostgreSQL dan MongoDB",
+    "evidence": "01_health_check.json"
+  },
+  {
+    "id": "TC-02",
+    "endpoint": "/students/:id/portfolio",
+    "method": "GET",
+    "condition": "Mahasiswa tidak terdaftar di PostgreSQL (ID 999999)",
+    "status": "PASS",
+    "http_code": 404,
+    "details": "Validasi keberadaan mahasiswa via PostgreSQL berhasil mengembalikan 404",
+    "evidence": "02_get_portfolio_student_not_found.json"
+  },
+  {
+    "id": "TC-03",
+    "endpoint": "/students/:id/portfolio",
+    "method": "GET",
+    "condition": "ID mahasiswa berupa string non-numerik",
+    "status": "PASS",
+    "http_code": 400,
+    "details": "Penolakan format parameter ID mahasiswa",
+    "evidence": "03_get_portfolio_invalid_id.json"
+  },
+  {
+    "id": "TC-04",
+    "endpoint": "/students/:id/portfolio",
+    "method": "GET",
+    "condition": "Request tanpa menyertakan Authorization Bearer token",
+    "status": "PASS",
+    "http_code": 401,
+    "details": "Middleware autentikasi menolak request tanpa token",
+    "evidence": "04_get_portfolio_unauthorized.json"
+  },
+  {
+    "id": "TC-05",
+    "endpoint": "/students/:id/portfolio",
+    "method": "GET",
+    "condition": "Mahasiswa ada di PostgreSQL, portofolio belum dibuat di MongoDB",
+    "status": "PASS",
+    "http_code": 404,
+    "details": "Respon konsisten 404 ketika portofolio belum ada",
+    "evidence": "05_get_portfolio_not_created.json"
+  },
+  {
+    "id": "TC-06",
+    "endpoint": "/students/:id/portfolio",
+    "method": "PUT",
+    "condition": "Body request dengan field wajib kosong",
+    "status": "PASS",
+    "http_code": 400,
+    "details": "Validasi deklaratif menolak request dengan keterangan field yang jelas",
+    "evidence": "06_put_portfolio_validation_error.json"
+  },
+  {
+    "id": "TC-07",
+    "endpoint": "/students/:id/portfolio",
+    "method": "PUT",
+    "condition": "Membuat portofolio baru mahasiswa 1 dengan projects dan certificates",
+    "status": "PASS",
+    "http_code": 200,
+    "details": "Dokumen portofolio berhasil disimpan dengan BSON types dan timestamps",
+    "evidence": "07_put_portfolio_create_success.json"
+  },
+  {
+    "id": "TC-08",
+    "endpoint": "/students/:id/portfolio",
+    "method": "GET",
+    "condition": "Mengambil portofolio mahasiswa yang sudah ada",
+    "status": "PASS",
+    "http_code": 200,
+    "details": "Data lengkap portofolio mahasiswa berhasil dikembalikan",
+    "evidence": "08_get_portfolio_success.json"
+  },
+  {
+    "id": "TC-09",
+    "endpoint": "/students/:id/portfolio",
+    "method": "PUT",
+    "condition": "Mengganti portofolio mahasiswa yang sudah ada (semantik PUT)",
+    "status": "PASS",
+    "http_code": 200,
+    "details": "Data diperbarui, created_at dipertahankan, updated_at dimutakhirkan",
+    "evidence": "09_put_portfolio_replace_success.json"
+  },
+  {
+    "id": "TC-10",
+    "endpoint": "/students/:id/portfolio/projects",
+    "method": "POST",
+    "condition": "Menambahkan proyek valid dengan operator $push",
+    "status": "PASS",
+    "http_code": 201,
+    "details": "Proyek ditambahkan dengan ID unik 6ae73463cf7db4685be0c6e8 dan header Location terisi",
+    "evidence": "10_post_project_success.json"
+  },
+  {
+    "id": "TC-11",
+    "endpoint": "/students/:id/portfolio/projects",
+    "method": "POST",
+    "condition": "Menambahkan proyek tanpa field judul (title)",
+    "status": "PASS",
+    "http_code": 400,
+    "details": "Validasi request menolak input yang tidak lengkap",
+    "evidence": "11_post_project_validation_error.json"
+  },
+  {
+    "id": "TC-12",
+    "endpoint": "/students/:id/portfolio/projects",
+    "method": "POST",
+    "condition": "Menambahkan proyek ke mahasiswa yang belum membuat portofolio",
+    "status": "PASS",
+    "http_code": 404,
+    "details": "Pemeriksaan ketersediaan portofolio mengembalikan 404",
+    "evidence": "12_post_project_portfolio_not_found.json"
+  },
+  {
+    "id": "TC-13",
+    "endpoint": "/students/:id/portfolio/projects/:projectId",
+    "method": "DELETE",
+    "condition": "Menghapus proyek dengan ID 6ae73463cf7db4685be0c6e8 menggunakan $pull",
+    "status": "PASS",
+    "http_code": 204,
+    "details": "Proyek terhapus dari array projects, respon 204 No Content",
+    "evidence": "13_delete_project_success.txt"
+  },
+  {
+    "id": "TC-14",
+    "endpoint": "/students/:id/portfolio/projects/:projectId",
+    "method": "DELETE",
+    "condition": "Menghapus kembali ID proyek yang sudah terhapus sebelumnya",
+    "status": "PASS",
+    "http_code": 404,
+    "details": "Respon 404 proyek tidak ditemukan",
+    "evidence": "14_delete_project_already_deleted.json"
+  },
+  {
+    "id": "TC-15",
+    "endpoint": "/students/:id/portfolio/projects/:projectId",
+    "method": "DELETE",
+    "condition": "Parameter projectId berupa string yang bukan ObjectID hex",
+    "status": "PASS",
+    "http_code": 400,
+    "details": "Validasi format ObjectID mencegah query database yang tidak valid",
+    "evidence": "15_delete_project_invalid_id.json"
+  },
+  {
+    "id": "TC-16",
+    "endpoint": "/students/:id/portfolio",
+    "method": "PUT",
+    "condition": "Request body berisi operator NoSQL {\"$ne\":\"\"} pada field string",
+    "status": "PASS",
+    "http_code": 400,
+    "details": "Body parser Go struct bertipe tetap menolak payload objek sebelum menyentuh MongoDB",
+    "evidence": "16_nosql_injection_rejected.json"
+  },
+  {
+    "id": "TC-17",
+    "endpoint": "/students/:id/portfolio/projects",
+    "method": "POST (10x Serentak)",
+    "condition": "18 proyek awal + 10 POST serentak",
+    "status": "PASS",
+    "http_code": 201,
+    "details": "Tepat 2 request berhasil (201), 8 ditolak (409 PROJECT_LIMIT), total proyek MongoDB = 20",
+    "evidence": "17_concurrency_project_limit_test.txt"
+  },
+  {
+    "id": "TC-18",
+    "endpoint": "/portfolios/stats/technologies",
+    "method": "GET",
+    "condition": "Aggregation pipeline dengan dua kali $unwind, grouping, dan limit 10",
+    "status": "PASS",
+    "http_code": 200,
+    "details": "Top 10 teknologi terpopuler berhasil dikelompokkan dan diurutkan",
+    "evidence": "18_aggregation_stats_technologies.json"
+  }
+]

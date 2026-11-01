@@ -1,0 +1,30 @@
+{
+  "_id": "6addb3bfe866b162bf09aa6d",
+  "student_id": 1,
+  "headline": "Senior Cloud Backend Engineer",
+  "bio": "Spesialis arsitektur backend Go berkinerja tinggi dengan database relasional dan NoSQL tingkat lanjut.",
+  "projects": [
+    {
+      "project_id": "6addb3bf0c6d40d72aaad7ff",
+      "title": "High-Throughput Payment Gateway",
+      "technologies": [
+        "Go",
+        "PostgreSQL",
+        "MongoDB",
+        "Redis"
+      ],
+      "link": "https://github.com/mahasiswa/paygate",
+      "year": 2026
+    }
+  ],
+  "certificates": [
+    {
+      "certificate_id": "6addb3bf0c6d40d72aaad800",
+      "name": "AWS Certified Solutions Architect",
+      "issuer": "Amazon Web Services",
+      "date": "2026-02-10"
+    }
+  ],
+  "created_at": "2026-10-25T07:46:07.532Z",
+  "updated_at": "2026-10-25T07:46:07.593Z"
+}

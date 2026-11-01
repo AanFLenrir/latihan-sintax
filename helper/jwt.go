@@ -1,91 +1,88 @@
 package helper
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
-	"os"
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"latihan-fiber/app/model"
 )
 
-// Claims dipusatkan di sini
-type Claims struct {
+var (
+	ErrInvalidToken = errors.New("token tidak valid")
+	ErrExpiredToken = errors.New("token sudah kedaluwarsa")
+)
+
+// accessClaims adalah isi access token.
+type accessClaims struct {
 	Username string `json:"username"`
 	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-// JWTManager membungkus konfigurasi pembuatan token
 type JWTManager struct {
 	secret    []byte
 	issuer    string
 	accessTTL time.Duration
 }
 
-// NewJWTManager adalah constructor untuk JWTManager (Dipanggil di main.go)
 func NewJWTManager(secret, issuer string, accessTTL time.Duration) *JWTManager {
-	return &JWTManager{
-		secret:    []byte(secret),
-		issuer:    issuer,
-		accessTTL: accessTTL,
-	}
+	return &JWTManager{secret: []byte(secret), issuer: issuer, accessTTL: accessTTL}
 }
 
-// Generate (versi instance method dari JWTManager)
-func (m *JWTManager) Generate(username, role string) (string, error) {
-	claims := Claims{
-		Username: username,
-		Role:     role,
+func (m *JWTManager) AccessTTL() time.Duration { return m.accessTTL }
+
+// GenerateAccess membuat access token berumur pendek.
+func (m *JWTManager) GenerateAccess(u model.User) (string, error) {
+	now := time.Now()
+	claims := accessClaims{
+		Username: u.Username,
+		Role:     u.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.accessTTL)),
+			Subject:   strconv.Itoa(u.ID),
 			Issuer:    m.issuer,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTTL)),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(m.secret)
 }
 
-// Digunakan oleh auth_service.go (Fungsi lama tetap dipertahankan)
-func GenerateAccessToken(username, role string) (string, error) {
-	secret := []byte(os.Getenv("JWT_SECRET"))
-	claims := Claims{
-		Username: username,
-		Role:     role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
-			Issuer:    os.Getenv("JWT_ISSUER"),
+// Parse memeriksa tanda tangan dan masa berlaku token.
+func (m *JWTManager) Parse(tokenString string) (model.AuthUser, error) {
+	claims := &accessClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims,
+		func(t *jwt.Token) (any, error) {
+			// PEMERIKSAAN WAJIB: pastikan algoritmanya memang HMAC.
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("algoritma tidak diharapkan: %v", t.Header["alg"])
+			}
+			return m.secret, nil
 		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(secret)
-}
-
-// Digunakan oleh auth_service.go
-func GenerateRefreshToken() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
-// Digunakan oleh middleware/auth.go
-func ParseToken(tokenStr string) (*Claims, error) {
-	secret := []byte(os.Getenv("JWT_SECRET"))
-	claims := &Claims{}
-	
-	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-		return secret, nil
-	})
+		jwt.WithIssuer(m.issuer),
+		jwt.WithExpirationRequired(),
+	)
 
 	if err != nil {
-		return nil, err
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return model.AuthUser{}, ErrExpiredToken
+		}
+		return model.AuthUser{}, ErrInvalidToken
 	}
 	if !token.Valid {
-		return nil, errors.New("token tidak valid")
+		return model.AuthUser{}, ErrInvalidToken
 	}
-	
-	return claims, nil
+
+	userID, err := strconv.Atoi(claims.Subject)
+	if err != nil {
+		return model.AuthUser{}, ErrInvalidToken
+	}
+	return model.AuthUser{
+		UserID:   userID,
+		Username: claims.Username,
+		Role:     claims.Role,
+	}, nil
 }

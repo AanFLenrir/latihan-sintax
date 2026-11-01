@@ -1,32 +1,33 @@
--- 1. Tambahkan permission baru
+-- 1. Mendaftarkan permission baru untuk students
 INSERT INTO permissions (name, description) VALUES
-('student:list', 'Melihat daftar seluruh mahasiswa'),
-('student:read:any', 'Melihat data mahasiswa mana pun'),
-('student:create', 'Menambahkan data mahasiswa'),
-('student:update:any', 'Mengubah data mahasiswa mana pun'),
-('student:delete', 'Menghapus data mahasiswa')
+    ('student:list', 'Melihat daftar seluruh student'),
+    ('student:read:any', 'Melihat data student mana pun'),
+    ('student:create', 'Mendaftarkan student baru'),
+    ('student:update:any', 'Mengubah data student mana pun'),
+    ('student:delete', 'Menghapus student')
 ON CONFLICT (name) DO NOTHING;
 
--- 2. Pasangkan ke role admin dan staff
+-- 2. Memasangkan permission kepada role admin dan staff
 INSERT INTO role_permissions (role_name, permission_name) VALUES
-('admin', 'student:list'),
-('admin', 'student:read:any'),
-('admin', 'student:create'),
-('admin', 'student:update:any'),
-('admin', 'student:delete'),
-('staff', 'student:list'),
-('staff', 'student:read:any'),
-('staff', 'student:create')
+    ('admin', 'student:list'),
+    ('admin', 'student:read:any'),
+    ('admin', 'student:create'),
+    ('admin', 'student:update:any'),
+    ('admin', 'student:delete'),
+    ('staff', 'student:list'),
+    ('staff', 'student:read:any'),
+    ('staff', 'student:create')
 ON CONFLICT DO NOTHING;
 
--- 3. Tambah kolom owner_id di tabel students
-ALTER TABLE students ADD COLUMN IF NOT EXISTS owner_id INTEGER;
+-- 3. Menambahkan owner_id ke tabel students
+-- Tambahkan kolomnya dulu sebagai opsional (boleh NULL) agar tidak bentrok dengan data lama
+ALTER TABLE students 
+ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
 
--- 4. Amankan data lama: isi owner_id yang masih kosong dengan ID Admin (misal id = 1)
-UPDATE students SET owner_id = 1 WHERE owner_id IS NULL;
+-- Update data lama yang belum punya owner_id (berikan ke user pertama di database)
+UPDATE students 
+SET owner_id = (SELECT id FROM users ORDER BY id ASC LIMIT 1) 
+WHERE owner_id IS NULL;
 
--- 5. Baru pasang constraint Foreign Key
-ALTER TABLE students DROP CONSTRAINT IF EXISTS students_owner_id_fkey;
-ALTER TABLE students
-ADD CONSTRAINT students_owner_id_fkey
-FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE SET NULL;
+-- Setelah semua baris lama diisi owner_id, kunci kolomnya menjadi wajib (NOT NULL)
+ALTER TABLE students ALTER COLUMN owner_id SET NOT NULL;

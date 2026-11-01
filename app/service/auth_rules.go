@@ -1,39 +1,84 @@
 package service
 
 import (
-	"errors"
+	"strings"
 	"unicode"
+
+	"latihan-fiber/app/model"
 )
 
-// ValidateRegisterInput memastikan input dasar tidak kosong dan memanggil aturan password
-func ValidateRegisterInput(username, email, password string) error {
-	if username == "" || email == "" {
-		return errors.New("username dan email tidak boleh kosong")
+const minPasswordLength = 8
+
+func ValidateRegister(req model.RegisterRequest) map[string]string {
+	errs := map[string]string{}
+	username := strings.TrimSpace(req.Username)
+
+	switch {
+	case username == "":
+		errs["username"] = "wajib diisi"
+	case len(username) < 3:
+		errs["username"] = "minimal 3 karakter"
+	case !isValidUsername(username):
+		errs["username"] = "hanya boleh huruf, angka, titik, dan garis bawah"
 	}
-	return ValidatePasswordStrength(password)
+
+	if !isValidEmail(req.Email) {
+		errs["email"] = "format email tidak valid"
+	}
+
+	if msg := checkPasswordStrength(req.Password); msg != "" {
+		errs["password"] = msg
+	}
+	return errs
 }
 
-// ValidatePasswordStrength adalah pure function untuk mengecek kekuatan password
-func ValidatePasswordStrength(password string) error {
-	if len(password) < 8 {
-		return errors.New("password minimal harus 8 karakter")
+// ValidateLogin hanya memeriksa kelengkapan, BUKAN kekuatan password.
+func ValidateLogin(req model.LoginRequest) map[string]string {
+	errs := map[string]string{}
+	if strings.TrimSpace(req.Username) == "" {
+		errs["username"] = "wajib diisi"
+	}
+	if req.Password == "" {
+		errs["password"] = "wajib diisi"
+	}
+	return errs
+}
+
+func checkPasswordStrength(password string) string {
+	if len(password) < minPasswordLength {
+		return "minimal 8 karakter"
 	}
 
-	var hasUpper, hasLower, hasDigit bool
-	for _, char := range password {
+	var hasLetter, hasDigit bool
+	for _, r := range password {
 		switch {
-		case unicode.IsUpper(char):
-			hasUpper = true
-		case unicode.IsLower(char):
-			hasLower = true
-		case unicode.IsDigit(char):
+		case unicode.IsLetter(r):
+			hasLetter = true
+		case unicode.IsDigit(r):
 			hasDigit = true
 		}
 	}
-
-	if !hasUpper || !hasLower || !hasDigit {
-		return errors.New("password harus mengandung huruf besar, huruf kecil, dan angka")
+	if !hasLetter || !hasDigit {
+		return "harus memuat huruf dan angka"
 	}
 
-	return nil
+	// Daftar ini sengaja sangat pendek. Sistem sungguhan memakai daftar
+	// berisi jutaan password yang pernah bocor.
+	weak := map[string]bool{
+		"password1": true, "12345678": true, "qwerty123": true,
+		"admin123": true, "password123": true,
+	}
+	if weak[strings.ToLower(password)] {
+		return "password terlalu umum"
+	}
+	return ""
+}
+
+func isValidUsername(username string) bool {
+	for _, r := range username {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '.' && r != '_' {
+			return false
+		}
+	}
+	return true
 }

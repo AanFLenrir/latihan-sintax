@@ -1,0 +1,21 @@
+================================================================
+   PENGUJIAN KETAHANAN DUA DATABASE (POLYGLOT PERSISTENCE)     
+================================================================
+
+--- SKENARIO N.1: PostgreSQL Gagal Dihubungi ---
+[N.1.1] Health Check saat PostgreSQL Down -> HTTP 503 (Ekspektasi: 503)
+[N.1.2] GET /students/1/portfolio saat PostgreSQL Down -> HTTP 500 (Ekspektasi: 500/503 karena validasi mahasiswa di PG gagal)
+[N.1.3] GET /portfolios/stats/technologies saat PostgreSQL Down -> HTTP 200 (Ekspektasi: 200 karena MongoDB tetap aktif)
+
+--- SKENARIO N.2: MongoDB Gagal Dihubungi ---
+[N.2.1] Health Check saat MongoDB Down -> HTTP 503 (Ekspektasi: 503)
+[N.2.2] GET /portfolios/stats/technologies saat MongoDB Down -> HTTP 500 (Ekspektasi: 500 Database Error)
+
+--- SKENARIO N.3: Pemulihan Koneksi (Recovery) ---
+[N.3.1] Health Check setelah Pemulihan -> HTTP 200 (Ekspektasi: 200)
+[N.3.2] GET /students/1/portfolio setelah Pemulihan -> HTTP 200 (Ekspektasi: 200)
+[N.3.3] GET /portfolios/stats/technologies setelah Pemulihan -> HTTP 200 (Ekspektasi: 200)
+
+================================================================
+   HASIL: KETAHANAN DUA DATABASE TERBUKTI SESUAI ARSITEKTUR   
+================================================================

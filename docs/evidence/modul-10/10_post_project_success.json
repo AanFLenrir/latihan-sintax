@@ -1,0 +1,3 @@
+Header Location: /api/v1/students/1/portfolio/projects/6ae73463cf7db4685be0c6e8
+
+{"success":true,"message":"proyek berhasil ditambahkan ke portofolio","data":{"id":"6ae73463cf7db4685be0c6e8","project_id":"6ae73463cf7db4685be0c6e8","title":"E-Commerce Microservices","technologies":["Go","Fiber","Docker","PostgreSQL"],"link":"https://github.com/mahasiswa/ecommerce","year":2026}}

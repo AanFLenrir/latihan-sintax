@@ -1,0 +1,58 @@
+{
+  "explainVersion": "1",
+  "queryPlanner": {
+    "namespace": "praktikum_backend.student_portfolios",
+    "parsedQuery": {
+      "student_id": {
+        "$eq": 1
+      }
+    },
+    "indexFilterSet": false,
+    "queryHash": "43E0E6EF",
+    "planCacheShapeHash": "43E0E6EF",
+    "planCacheKey": "3026C9D8",
+    "optimizationTimeMillis": 0,
+    "maxIndexedOrSolutionsReached": false,
+    "maxIndexedAndSolutionsReached": false,
+    "maxScansToExplodeReached": false,
+    "prunedSimilarIndexes": false,
+    "winningPlan": {
+      "isCached": false,
+      "stage": "EXPRESS_IXSCAN",
+      "keyPattern": "{ student_id: 1 }",
+      "indexName": "student_portfolio_unique"
+    },
+    "rejectedPlans": []
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 1,
+    "executionTimeMillis": 3,
+    "totalKeysExamined": 1,
+    "totalDocsExamined": 1,
+    "executionStages": {
+      "isCached": false,
+      "stage": "EXPRESS_IXSCAN",
+      "keyPattern": "{ student_id: 1 }",
+      "indexName": "student_portfolio_unique",
+      "keysExamined": 1,
+      "docsExamined": 1,
+      "nReturned": 1
+    }
+  },
+  "queryShapeHash": "5B0C56B5B65E8C605CC2D918C02C2BA004228AA5732085F674D3401BD6235F4C",
+  "command": {
+    "find": "student_portfolios",
+    "filter": {
+      "student_id": 1
+    },
+    "$db": "praktikum_backend"
+  },
+  "serverInfo": {
+    "host": "flenrir",
+    "port": 27017,
+    "version": "8.3.8",
+    "gitVersion": "35e8c8a57f78157ed9fac1a9e90ee6c1818adab6"
+  },
+  "ok": 1
+}

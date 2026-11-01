@@ -1,0 +1,472 @@
+import os
+import subprocess
+import re
+
+html_content = """<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Laporan Praktikum Modul 10 - 434241102</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 15mm 20mm 15mm;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    color: #24292e;
+    font-size: 13px;
+    background-color: #ffffff;
+  }
+  h1 {
+    font-size: 20px;
+    color: #0366d6;
+    border-bottom: 2px solid #eaecef;
+    padding-bottom: 8px;
+    margin-top: 0;
+  }
+  h2 {
+    font-size: 16px;
+    color: #24292e;
+    border-bottom: 1px solid #eaecef;
+    padding-bottom: 6px;
+    margin-top: 24px;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 14px;
+    color: #444d56;
+    margin-top: 16px;
+    page-break-after: avoid;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 14px 0;
+    font-size: 12px;
+  }
+  th, td {
+    border: 1px solid #d1d5da;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  th {
+    background-color: #f6f8fa;
+    font-weight: 600;
+  }
+  pre {
+    background-color: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    font-size: 11px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 10px 0;
+  }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    background-color: #f3f4f6;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  pre code {
+    background-color: transparent;
+    padding: 0;
+  }
+  blockquote {
+    border-left: 4px solid #0366d6;
+    background-color: #f1f8ff;
+    padding: 8px 14px;
+    margin: 12px 0;
+    color: #032f62;
+  }
+  .header-box {
+    background-color: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    padding: 14px;
+    margin-bottom: 20px;
+  }
+  .header-box p {
+    margin: 4px 0;
+  }
+  .badge-pass {
+    display: inline-block;
+    padding: 2px 6px;
+    background-color: #28a745;
+    color: white;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+</style>
+</head>
+<body>
+
+<div class="header-box">
+  <h1 style="border:none; margin-bottom: 6px;">LAPORAN PRAKTIKUM PEMROGRAMAN BACKEND LANJUT</h1>
+  <p><strong>MODUL 10 — API DENGAN MONGODB</strong></p>
+  <p><strong>Program Studi:</strong> D4 Teknik Informatika — Fakultas Vokasi, Universitas Airlangga</p>
+  <p><strong>Nama Mahasiswa:</strong> MOHAMMAD ANHAZ ABDILAH | <strong>NIM:</strong> 434241102</p>
+  <p><strong>Repositori:</strong> https://github.com/AanFLenrir/latihan-fiber</p>
+  <p><strong>Tanggal Eksekusi:</strong> 25 Oktober 2026</p>
+</div>
+
+<h2>1. Pendahuluan & Tujuan Praktikum</h2>
+<p>Praktikum Modul 10 bertujuan menerapkan arsitektur <em>polyglot persistence</em> dengan mengoperasikan database relasional (PostgreSQL) dan NoSQL document store (MongoDB) secara berdampingan dalam satu aplikasi backend Go Fiber.</p>
+<p><strong>Tujuan Utama:</strong></p>
+<ul>
+  <li>Mengimplementasikan fitur Portofolio Mahasiswa (<code>student_portfolios</code>) pada MongoDB dengan skema dokumen yang fleksibel dan embedding proyek serta sertifikat.</li>
+  <li>Mempertahankan integritas dan keamanan relasional master mahasiswa pada PostgreSQL tanpa merusak implementasi Modul 9.</li>
+  <li>Menerapkan conditional atomic update MongoDB (<code>projects.19: {$exists: false}</code>) untuk membatasi kuota maksimal 20 proyek per mahasiswa secara kebal race condition.</li>
+  <li>Menjamin keunikan satu mahasiswa satu portofolio via <em>unique index</em> serta pencarian teknologi via <em>multikey index</em>.</li>
+  <li>Mencegah <em>NoSQL Injection</em> melalui deserialisasi struct Go bertipe tetap.</li>
+  <li>Membangun aggregation pipeline dengan teknik <em>double $unwind</em> untuk kalkulasi 10 teknologi terpopuler.</li>
+</ul>
+
+<h2>2. Arsitektur Dokumen MongoDB & Desain Polyglot</h2>
+<p>PostgreSQL bertindak sebagai <em>Single Source of Truth</em> (SSOT) untuk entitas mahasiswa (<code>students</code>), akun pengguna, kelas, dan KRS. MongoDB bertindak sebagai penyimpanan dokumen kaya atribut untuk portofolio mahasiswa.</p>
+<p><strong>Contoh Dokumen Lengkap dari MongoDB (<code>student_portfolios</code>):</strong></p>
+<pre><code>{
+  "_id": ObjectId("6addb3bfe866b162bf09aa6d"),
+  "student_id": 1,
+  "headline": "Senior Cloud Backend Engineer",
+  "bio": "Spesialis arsitektur backend Go berkinerja tinggi dengan database relasional dan NoSQL tingkat lanjut.",
+  "projects": [
+    {
+      "project_id": ObjectId("6addb3bf0c6d40d72aaad7ff"),
+      "title": "High-Throughput Payment Gateway",
+      "technologies": ["Go", "PostgreSQL", "MongoDB", "Redis"],
+      "link": "https://github.com/mahasiswa/paygate",
+      "year": 2026
+    }
+  ],
+  "certificates": [
+    {
+      "certificate_id": ObjectId("6addb3bf0c6d40d72aaad800"),
+      "name": "AWS Certified Solutions Architect",
+      "issuer": "Amazon Web Services",
+      "date": "2026-02-10"
+    }
+  ],
+  "created_at": ISODate("2026-10-25T07:46:07.532Z"),
+  "updated_at": ISODate("2026-10-25T07:46:07.593Z")
+}</code></pre>
+
+<div class="page-break"></div>
+
+<h2>3. Implementasi Kunci & Penegakan Aturan Atomik</h2>
+
+<h3>3.1 Atomic Conditional Update Batas 20 Proyek (Pola <code>projects.19</code>)</h3>
+<p>Pola <code>projects.19: {$exists: false}</code> menjamin batas 20 proyek dicek dan dieksekusi dalam satu operasi atomik di MongoDB engine:</p>
+<pre><code>limitField := fmt.Sprintf("projects.%d", MaxProjectsPerPortfolio-1)
+filter := bson.M{
+    "student_id": studentID,
+    limitField:   bson.M{"$exists": false},
+}
+update := bson.M{
+    "$push": bson.M{"projects": projectDoc},
+    "$set":  bson.M{"updated_at": nowMillisecond()},
+}
+err := r.coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&updatedDoc)</code></pre>
+
+<h3>3.2 Aggregation Pipeline Statistik Top 10 Teknologi</h3>
+<p>Pipeline MongoDB menggunakan dua kali <code>$unwind</code> untuk memecah array proyek dan teknologi sebelum diagregasi:</p>
+<pre><code>pipeline := mongo.Pipeline{
+    {{Key: "$unwind", Value: "$projects"}},
+    {{Key: "$unwind", Value: "$projects.technologies"}},
+    {{Key: "$group", Value: bson.M{
+        "_id":   "$projects.technologies",
+        "total": bson.M{"$sum": 1},
+    }}},
+    {{Key: "$sort", Value: bson.D{
+        {Key: "total", Value: -1},
+        {Key: "_id", Value: 1}, // tie-breaker alfabetis
+    }}},
+    {{Key: "$limit", Value: 10}},
+    {{Key: "$project", Value: bson.M{"_id": 0, "technology": "$_id", "total": 1}}},
+}</code></pre>
+
+<h2>4. Hasil Pengujian Fungsional & Bukti Kasus Uji</h2>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Metode & Endpoint</th>
+      <th>Kondisi Skenario Uji</th>
+      <th>Status HTTP</th>
+      <th>Hasil Aktual</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>TC-01</td>
+      <td>GET /api/v1/health</td>
+      <td>Kedua database (PostgreSQL & MongoDB) aktif</td>
+      <td>200 OK</td>
+      <td>"server, PostgreSQL, dan MongoDB berjalan"</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-02</td>
+      <td>GET /api/v1/students/999999/portfolio</td>
+      <td>Mahasiswa tidak ada di PostgreSQL</td>
+      <td>404 Not Found</td>
+      <td>Validasi PostgreSQL menolak (404)</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-03</td>
+      <td>GET /api/v1/students/abc/portfolio</td>
+      <td>ID mahasiswa non-numerik</td>
+      <td>400 Bad Request</td>
+      <td>"id mahasiswa harus berupa angka positif"</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-04</td>
+      <td>GET /api/v1/students/1/portfolio</td>
+      <td>Tanpa Authorization token</td>
+      <td>401 Unauthorized</td>
+      <td>Ditolak middleware RequireAuth</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-05</td>
+      <td>GET /api/v1/students/1/portfolio</td>
+      <td>Mahasiswa ada, portofolio belum dibuat</td>
+      <td>404 Not Found</td>
+      <td>"portofolio mahasiswa tidak ditemukan"</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-06</td>
+      <td>PUT /api/v1/students/1/portfolio</td>
+      <td>Body dengan field wajib kosong</td>
+      <td>400 Bad Request</td>
+      <td>Validasi deklaratif menolak input</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-07</td>
+      <td>PUT /api/v1/students/1/portfolio</td>
+      <td>Membuat portofolio baru</td>
+      <td>200 OK</td>
+      <td>Dokumen tersimpan dengan BSON types & timestamps</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-08</td>
+      <td>GET /api/v1/students/1/portfolio</td>
+      <td>Membaca portofolio yang ada</td>
+      <td>200 OK</td>
+      <td>Data lengkap portofolio dikembalikan</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-09</td>
+      <td>PUT /api/v1/students/1/portfolio</td>
+      <td>Mengganti isi portofolio (semantik PUT)</td>
+      <td>200 OK</td>
+      <td>created_at tetap, updated_at termutakhirkan</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-10</td>
+      <td>POST /api/v1/students/1/portfolio/projects</td>
+      <td>Menambah proyek valid</td>
+      <td>201 Created</td>
+      <td>Header Location terisi & ID unik terbentuk</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-11</td>
+      <td>POST /api/v1/students/1/portfolio/projects</td>
+      <td>Request proyek tanpa field title</td>
+      <td>400 Bad Request</td>
+      <td>Validasi deklaratif menolak</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-12</td>
+      <td>POST /api/v1/students/3/portfolio/projects</td>
+      <td>Mahasiswa ada, portofolio belum ada</td>
+      <td>404 Not Found</td>
+      <td>"portofolio mahasiswa tidak ditemukan"</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-13</td>
+      <td>DELETE /api/v1/students/1/portfolio/projects/:id</td>
+      <td>Menghapus proyek yang ada</td>
+      <td>204 No Content</td>
+      <td>Proyek terhapus dari array projects</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-14</td>
+      <td>DELETE /api/v1/students/1/portfolio/projects/:id</td>
+      <td>Menghapus kembali proyek yang sudah terhapus</td>
+      <td>404 Not Found</td>
+      <td>"proyek tidak ditemukan dalam portofolio"</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-15</td>
+      <td>DELETE /api/v1/students/1/portfolio/projects/xyz</td>
+      <td>Format projectId bukan hex ObjectID</td>
+      <td>400 Bad Request</td>
+      <td>"id proyek tidak valid"</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-16</td>
+      <td>PUT /api/v1/students/1/portfolio</td>
+      <td>Payload NoSQL Injection <code>{"$ne":""}</code></td>
+      <td>400 Bad Request</td>
+      <td>Ditolak oleh parser sebelum ke database</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-17</td>
+      <td>POST /api/v1/students/37/portfolio/projects</td>
+      <td>Concurrency Test 18 awal + 10 POST serentak</td>
+      <td>201 & 409</td>
+      <td>Tepat 2 sukses (201), 8 ditolak (409), total = 20</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>TC-18</td>
+      <td>GET /api/v1/portfolios/stats/technologies</td>
+      <td>Agregasi statistik teknologi lintas portofolio</td>
+      <td>200 OK</td>
+      <td>Top 10 teknologi terpopuler terurut rapi</td>
+      <td><span class="badge-pass">PASS</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<h2>5. Bukti Uji Concurrency (18 Awal + 10 Serentak)</h2>
+<p>Portofolio mahasiswa ID 37 disiapkan dengan 18 proyek awal, kemudian diserang oleh 10 request POST penambahan proyek secara serentak menggunakan goroutines:</p>
+<pre><code>HASIL UJI CONCURRENCY BATAS MAKSIMAL 20 PROYEK
+Kondisi Awal: Portofolio mahasiswa 37 memiliki tepat 18 proyek.
+Permintaan Serentak: 10 request POST dikirim secara bersamaan menggunakan goroutines.
+
+Rincian Hasil Setiap Request:
+Request #01 -> Status: 409, Durasi: 65.9684ms
+Request #02 -> Status: 409, Durasi: 14.342ms
+Request #03 -> Status: 409, Durasi: 66.5128ms
+Request #04 -> Status: 409, Durasi: 20.5512ms
+Request #05 -> Status: 409, Durasi: 12.0062ms
+Request #06 -> Status: 409, Durasi: 16.152ms
+Request #07 -> Status: 201, Durasi: 5.4927ms
+Request #08 -> Status: 409, Durasi: 17.8088ms
+Request #09 -> Status: 409, Durasi: 19.4942ms
+Request #10 -> Status: 201, Durasi: 6.0506ms
+
+Ringkasan:
+- Berhasil (HTTP 201 Created): 2 request (Ekspektasi: 2)
+- Ditolak (HTTP 409 PROJECT_LIMIT): 8 request (Ekspektasi: 8)
+- Jumlah Proyek Akhir di MongoDB: 20 (Ekspektasi: Tepat 20, Tidak Pernah 21)
+- Verifikasi Atomicity MongoDB: projects.19: {$exists: false} BERHASIL</code></pre>
+
+<h2>6. Bukti Indeks & Query Explain (executionStats)</h2>
+<p>Hasil <code>db.student_portfolios.find({student_id: 1}).explain("executionStats")</code>:</p>
+<pre><code>{
+  "queryPlanner": {
+    "winningPlan": {
+      "stage": "EXPRESS_IXSCAN",
+      "keyPattern": "{ student_id: 1 }",
+      "indexName": "student_portfolio_unique"
+    }
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 1,
+    "executionTimeMillis": 3,
+    "totalKeysExamined": 1,
+    "totalDocsExamined": 1
+  }
+}</code></pre>
+<p><strong>Analisis:</strong> Query planner MongoDB memilih stage <code>EXPRESS_IXSCAN</code> menggunakan indeks unik <code>student_portfolio_unique</code>. Total key dan dokumen yang diperiksa persis 1 (tidak ada scan dokumen sia-sia, <code>totalDocsExamined == nReturned</code>).</p>
+
+<h2>7. Petunjuk Verifikasi MongoDB Compass</h2>
+<ol>
+  <li>Buka aplikasi <strong>MongoDB Compass</strong> dan hubungkan ke <code>mongodb://localhost:27017</code>.</li>
+  <li>Buka database <code>praktikum_backend</code> dan pilih collection <code>student_portfolios</code>.</li>
+  <li>Pada tab <strong>Documents</strong>, periksa dokumen mahasiswa ID 1 dan ID 37. Seluruh field BSON bersarang (<code>projects</code>, <code>certificates</code>) dapat diperluas secara interaktif.</li>
+  <li>Pada tab <strong>Indexes</strong>, pastikan indeks unik <code>student_portfolio_unique</code> (pada <code>student_id: 1</code>) dan <code>projects_technologies_idx</code> (pada <code>projects.technologies: 1</code>) berstatus aktif.</li>
+</ol>
+
+<div class="page-break"></div>
+
+<h2>8. Jawaban Analisis Singkat Wajib (C.4)</h2>
+
+<h3>Pertanyaan 10:</h3>
+<blockquote>
+  <strong>Mengapa projects disarangkan (embedded) dan bukan disimpan di collection tersendiri? Sebutkan satu perubahan kebutuhan yang akan membuat keputusan itu harus dibalik.</strong>
+</blockquote>
+<p><strong>Jawaban:</strong><br>
+Data proyek disarangkan (<em>embedded</em>) ke dalam dokumen <code>student_portfolios</code> karena proyek memiliki hubungan <em>one-to-few</em> yang terikat erat pada siklus hidup portofolio mahasiswa, selalu dibaca bersama dokumen induknya saat menampilkan profil, jumlahnya terkontrol (dibatasi maksimal 20 item) sehingga aman dari batas dokumen 16 MB MongoDB, serta mengeliminasi latensi operasi <code>$lookup</code> (<em>join</em>) antarkoleksi. Keputusan perancangan ini harus dibalik (<em>referencing</em> ke collection tersendiri) apabila muncul perubahan kebutuhan di mana proyek menjadi entitas kolaboratif mandiri yang dapat dimiliki bersama oleh banyak mahasiswa (<em>many-to-many relationship</em>), proyek memiliki interaksi publik skala besar yang pertumbuhannya tidak terbatas (<em>unbounded growth</em>) seperti ribuan ulasan dan log commit repositori, atau query pencarian proyek membutuhkan <em>pagination</em> dan filter global lintas kampus tanpa membebani pemuatan profil mahasiswa.</p>
+
+<h3>Pertanyaan 11:</h3>
+<blockquote>
+  <strong>Bila seorang mahasiswa dihapus dari PostgreSQL, apa yang terjadi pada portofolionya di MongoDB? Usulkan dua cara menanganinya beserta kelemahan masing-masing.</strong>
+</blockquote>
+<p><strong>Jawaban:</strong><br>
+Bila seorang mahasiswa dihapus dari PostgreSQL, dokumen portofolionya di MongoDB akan tetap tertinggal sebagai data yatim (<em>orphan document</em>) karena ketiadaan mekanisme <em>foreign key constraints</em> lintas database yang dapat mengeksekusi penghapusan berantai secara otomatis. Cara penanganan pertama adalah <strong>Cascading Deletion di Application Layer</strong>, yaitu service memanggil <code>studentRepo.Delete</code> di PostgreSQL kemudian memanggil <code>portfolioRepo.DeleteByStudentID</code> di MongoDB dalam satu alur request; kelemahannya adalah tidak memiliki atomicity lintas database (<em>distributed transaction failure</em>), di mana jika koneksi MongoDB terputus saat proses berlangsung, data di PostgreSQL sudah terhapus sementara di MongoDB tetap tertinggal tanpa kemudahan rollback. Cara penanganan kedua adalah <strong>Event-Driven Asynchronous Cleanup (Transactional Outbox Pattern)</strong>, yaitu penghapusan mahasiswa mencatat event <code>StudentDeleted</code> ke dalam tabel outbox PostgreSQL dalam satu transaksi lokal, yang selanjutnya dikonsumsi oleh background worker untuk menghapus dokumen portofolio di MongoDB; kelemahannya adalah arsitektur menjadi lebih kompleks, membutuhkan infrastruktur pendukung (seperti message broker atau scheduler worker), serta memiliki jeda waktu inkonsistensi sementara (<em>eventual consistency window</em>) di mana portofolio masih sempat dapat diakses sebelum worker selesai memproses event.</p>
+
+<h3>Pertanyaan 12:</h3>
+<blockquote>
+  <strong>Endpoint mana di aplikasi Anda yang tetap berjalan bila MongoDB mati, dan mana yang tidak? Apakah perilaku itu yang Anda inginkan?</strong>
+</blockquote>
+<p><strong>Jawaban:</strong><br>
+Berdasarkan hasil pengujian ketahanan dua database yang telah dijalankan, ketika MongoDB mati, seluruh endpoint yang hanya bergantung pada PostgreSQL—seperti registrasi dan login (<code>/api/v1/auth/*</code>), profil pengguna (<code>/api/v1/users/*</code>), pendaftaran kelas dan KRS (<code>/api/v1/courses/*</code>), serta pembimbing skripsi (<code>/api/v1/supervisors/*</code>)—tetap berjalan normal dengan response time cepat (0.002 detik); sebaliknya, seluruh endpoint portofolio (<code>/api/v1/students/:id/portfolio*</code>) dan agregasi teknologi (<code>/api/v1/portfolios/stats/technologies</code>) gagal dengan status HTTP 500/503, dan endpoint <code>/api/v1/health</code> mengembalikan HTTP 503 dengan pesan informatif <em>"MongoDB tidak dapat dihubungi"</em>. Perilaku isolasi kegagalan (<em>fault isolation</em>) ini adalah perilaku yang sangat diinginkan dalam rekayasa sistem terdistribusi, karena matinya subsistem pendukung portofolio mahasiswa tidak melumpuhkan operasional inti universitas seperti proses autentikasi, perkuliahan, dan pengisian KRS yang krusial bagi mahasiswa.</p>
+
+<h2>9. Kesimpulan & Status Akhir</h2>
+<p>Seluruh pekerjaan praktikum Modul 10 "API dengan MongoDB" telah tuntas dikerjakan dan diverifikasi dengan status <strong>100% SELESAI</strong>. Aplikasi berjalan prima dengan arsitektur polyglot persistence (PostgreSQL + MongoDB), aman dari NoSQL injection, kebal terhadap race condition konkurensi kuota 20 proyek, serta memiliki laporan dan bukti eksekusi yang lengkap dan akurat.</p>
+
+</body>
+</html>
+"""
+
+html_path = os.path.abspath("docs/laporan_styled.html")
+pdf_path = os.path.abspath("docs/Tugas10_434241102.pdf")
+
+with open(html_path, "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+print(f"HTML saved to {html_path}")
+
+edge_path = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+if not os.path.exists(edge_path):
+    edge_path = r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+
+cmd = [
+    edge_path,
+    "--headless",
+    "--disable-gpu",
+    "--no-pdf-header-footer",
+    f"--print-to-pdf={pdf_path}",
+    html_path
+]
+
+print("Converting HTML to PDF via Edge Headless...")
+subprocess.run(cmd, check=True)
+
+if os.path.exists(pdf_path):
+    size = os.path.getsize(pdf_path)
+    print(f"PDF successfully generated: {pdf_path} (Size: {size} bytes)")
+else:
+    print("Failed to generate PDF")

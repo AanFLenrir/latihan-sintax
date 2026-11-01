@@ -2,7 +2,7 @@ package helper
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"latihan-sintaks/app/model" // PASTIKAN INI SAMA DENGAN NAMA DI FILE go.mod
+	"latihan-fiber/app/model"
 )
 
 func Success(c *fiber.Ctx, status int, message string, data any) error {
@@ -17,6 +17,13 @@ func SuccessList(c *fiber.Ctx, message string, data any, meta *model.Meta) error
 	})
 }
 
+// SuccessCursor ditambahkan untuk Langkah 7 (Cursor Pagination)
+func SuccessCursor(c *fiber.Ctx, message string, data any, meta *model.CursorMeta) error {
+	return c.Status(fiber.StatusOK).JSON(model.WebResponse{
+		Success: true, Message: message, Data: data, Meta: meta, // Pastikan field Meta di WebResponse bertipe `any` atau bisa menerima CursorMeta
+	})
+}
+
 // Created mengirim 201 sekaligus memasang header Location.
 func Created(c *fiber.Ctx, message string, data any, location string) error {
 	c.Set("Location", location)
@@ -27,16 +34,4 @@ func Created(c *fiber.Ctx, message string, data any, location string) error {
 
 func NoContent(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
-}
-
-func Fail(c *fiber.Ctx, status int, message string) error {
-	return c.Status(status).JSON(model.WebResponse{
-		Success: false, Message: message,
-	})
-}
-
-func FailValidation(c *fiber.Ctx, errs map[string]string) error {
-	return c.Status(fiber.StatusUnprocessableEntity).JSON(model.WebResponse{
-		Success: false, Message: "validasi gagal", Errors: errs,
-	})
 }

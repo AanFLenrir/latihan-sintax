@@ -3,46 +3,53 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	
-	// Sesuaikan "latihan-sintaks" ini dengan module di go.mod Anda
-	"latihan-sintaks/config"
+
+	"latihan-fiber/config"
 )
 
-func ConnectPostgres() *pgxpool.Pool {
-	// Merakit Data Source Name (DSN) dari environment
+// NewPool membuat connection pool ke PostgreSQL.
+//
+// Pool, bukan koneksi tunggal: server melayani banyak permintaan sekaligus,
+// sedangkan membuka koneksi baru untuk setiap permintaan sangat mahal.
+// Pool menyediakan sejumlah koneksi siap pakai yang dipinjam lalu dikembalikan.
+func NewPool(ctx context.Context) (*pgxpool.Pool, error) {
 	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s pool_max_conns=%s",
-		config.GetEnv("DB_HOST", "127.0.0.1"),
-		config.GetEnv("DB_PORT", "5432"),
+		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		config.GetEnv("DB_USER", "postgres"),
-		config.GetEnv("DB_PASSWORD", ""), // pastikan mengisi password di file .env
+		config.GetEnv("DB_PASSWORD", ""),
+		config.GetEnv("DB_HOST", "localhost"),
+		config.GetEnv("DB_PORT", "5432"),
 		config.GetEnv("DB_NAME", "praktikum_backend"),
 		config.GetEnv("DB_SSLMODE", "disable"),
-		config.GetEnv("DB_MAX_CONNS", "10"),
 	)
 
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		log.Fatalf("Gagal membaca konfigurasi database: %v", err)
+		return nil, fmt.Errorf("konfigurasi database tidak valid: %w", err)
 	}
 
-	// Memberikan batas waktu 5 detik untuk mencoba terhubung
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	cfg.MaxConns = int32(config.GetEnvInt("DB_MAX_CONNS", 10))
+	cfg.MinConns = 2
+	cfg.MaxConnLifetime = time.Hour
+	cfg.MaxConnIdleTime = 30 * time.Minute
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		log.Fatalf("Gagal membuat koneksi ke PostgreSQL: %v", err)
+		return nil, fmt.Errorf("gagal membuat pool: %w", err)
 	}
 
-	if err := pool.Ping(ctx); err != nil {
-		log.Fatalf("PostgreSQL tidak merespons (Ping gagal): %v", err)
+	// Ping memastikan kredensial benar dan server memang dapat dihubungi.
+	// Tanpa ini, kesalahan baru ketahuan saat permintaan pertama masuk.
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if err := pool.Ping(pingCtx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("gagal terhubung ke database: %w", err)
 	}
 
-	fmt.Println("Koneksi ke PostgreSQL berhasil!")
-	return pool
+	return pool, nil
 }

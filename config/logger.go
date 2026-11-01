@@ -1,24 +1,50 @@
 package config
 
 import (
+	"io"
+	"log/slog"
 	"os"
-	"github.com/gofiber/fiber/v2/middleware/logger"
+	"path/filepath"
+	"strings"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// SetupLogger membuka atau membuat file log.
-func SetupLogger() *os.File {
-	file, err := os.OpenFile("./logs/app.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		panic("gagal membuka file log: " + err.Error())
+// NewLogger membuat logger terstruktur yang menulis ke dua tujuan sekaligus:
+// layar (stdout) agar terlihat saat praktikum, dan file logs/app.log yang
+// dirotasi otomatis agar tidak membengkak tanpa batas.
+func NewLogger() *slog.Logger {
+	if err := os.MkdirAll("logs", 0755); err != nil {
+		panic("gagal membuat folder logs: " + err.Error())
 	}
-	return file
+
+	rotator := &lumberjack.Logger{
+		Filename:   filepath.Join("logs", "app.log"),
+		MaxSize:    10, // rotasi setiap file mencapai 10 MB
+		MaxBackups: 5,  // simpan 5 file lama
+		MaxAge:     14, // hapus file yang lebih tua dari 14 hari
+		Compress:   true,
+	}
+
+	writer := io.MultiWriter(os.Stdout, rotator)
+	handler := slog.NewJSONHandler(writer, &slog.HandlerOptions{
+		Level: parseLevel(GetEnv("LOG_LEVEL", "info")),
+	})
+
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+	return logger
 }
 
-// LoggerConfig mengatur format log ke dalam JSON satu baris.
-func LoggerConfig(file *os.File) logger.Config {
-	return logger.Config{
-		Format:     `{"time":"${time}","request_id":"${locals:requestid}","method":"${method}","path":"${path}","status":${status},"latency":"${latency}"}` + "\n",
-		TimeFormat: "2006-01-02T15:04:05.000Z07:00",
-		Output:     file,
+func parseLevel(value string) slog.Level {
+	switch strings.ToLower(value) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
 }

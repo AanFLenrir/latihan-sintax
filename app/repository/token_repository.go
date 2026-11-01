@@ -3,63 +3,82 @@ package repository
 import (
 	"context"
 	"errors"
-	"time"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"latihan-fiber/app/model"
 )
 
 type TokenRepository interface {
-	Save(ctx context.Context, userID int, token string) error
-	FindByToken(ctx context.Context, token string) (int, error)
-	Delete(ctx context.Context, token string) error
+	Save(ctx context.Context, t model.RefreshToken) error
+	FindActive(ctx context.Context, tokenHash string) (model.RefreshToken, error)
+	Revoke(ctx context.Context, tokenHash string) error
+	RevokeAllForUser(ctx context.Context, userID int) error
 }
 
-type tokenRepository struct {
-	db *pgxpool.Pool
+type tokenPostgresRepository struct {
+	pool *pgxpool.Pool
 }
 
-func NewTokenRepository(db *pgxpool.Pool) TokenRepository {
-	// Hapus tabel lama kalau ada, lalu buat ulang dari nol supaya strukturnya bersih
-	dropQuery := `DROP TABLE IF EXISTS refresh_tokens CASCADE;`
-	_, _ = db.Exec(context.Background(), dropQuery)
-
-	createQuery := `
-	CREATE TABLE refresh_tokens (
-		id SERIAL PRIMARY KEY,
-		user_id INT NOT NULL,
-		token TEXT NOT NULL UNIQUE,
-		expires_at TIMESTAMP NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-	);`
-	_, _ = db.Exec(context.Background(), createQuery)
-
-	return &tokenRepository{db: db}
+func NewTokenRepository(pool *pgxpool.Pool) TokenRepository {
+	return &tokenPostgresRepository{pool: pool}
 }
 
-func (r *tokenRepository) Save(ctx context.Context, userID int, token string) error {
-	query := `INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`
-	expiresAt := time.Now().Add(7 * 24 * time.Hour)
-	_, err := r.db.Exec(ctx, query, userID, token, expiresAt)
-	return err
+func (r *tokenPostgresRepository) Save(ctx context.Context, t model.RefreshToken) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3)`,
+		t.UserID, t.TokenHash, t.ExpiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("menyimpan refresh token: %w", err)
+	}
+	return nil
 }
 
-func (r *tokenRepository) FindByToken(ctx context.Context, token string) (int, error) {
-	query := `SELECT user_id FROM refresh_tokens WHERE token = $1 AND expires_at > NOW()`
-	var userID int
-	err := r.db.QueryRow(ctx, query, token).Scan(&userID)
+// FindActive hanya mengembalikan token yang belum dicabut DAN belum kedaluwarsa.
+func (r *tokenPostgresRepository) FindActive(
+	ctx context.Context, tokenHash string,
+) (model.RefreshToken, error) {
+	var t model.RefreshToken
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, user_id, token_hash, expires_at, revoked_at, created_at
+		FROM refresh_tokens
+		WHERE token_hash = $1
+		  AND revoked_at IS NULL
+		  AND expires_at > NOW()`, tokenHash,
+	).Scan(&t.ID, &t.UserID, &t.TokenHash, &t.ExpiresAt, &t.RevokedAt, &t.CreatedAt)
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, errors.New("refresh token tidak valid atau kadaluarsa")
+			return model.RefreshToken{}, ErrNotFound
 		}
-		return 0, err
+		return model.RefreshToken{}, fmt.Errorf("mengambil refresh token: %w", err)
 	}
-	return userID, nil
+	return t, nil
 }
 
-func (r *tokenRepository) Delete(ctx context.Context, token string) error {
-	query := `DELETE FROM refresh_tokens WHERE token = $1`
-	_, err := r.db.Exec(ctx, query, token)
-	return err
+func (r *tokenPostgresRepository) Revoke(ctx context.Context, tokenHash string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE refresh_tokens SET revoked_at = NOW()
+		WHERE token_hash = $1 AND revoked_at IS NULL`, tokenHash,
+	)
+	if err != nil {
+		return fmt.Errorf("mencabut refresh token: %w", err)
+	}
+	return nil
+}
+
+func (r *tokenPostgresRepository) RevokeAllForUser(
+	ctx context.Context, userID int,
+) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE refresh_tokens SET revoked_at = NOW()
+		WHERE user_id = $1 AND revoked_at IS NULL`, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("mencabut seluruh refresh token user: %w", err)
+	}
+	return nil
 }

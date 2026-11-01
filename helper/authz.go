@@ -8,6 +8,8 @@ type PermissionSet struct {
 }
 
 // NewPermissionSet mengubah hasil query menjadi bentuk yang cepat dicari.
+// map bersarang dipilih karena pencarian "apakah role X punya permission Y"
+// menjadi satu langkah, bukan perulangan sepanjang daftar.
 func NewPermissionSet(raw map[string][]string) *PermissionSet {
 	byRole := make(map[string]map[string]struct{}, len(raw))
 	for role, permissions := range raw {
@@ -21,7 +23,9 @@ func NewPermissionSet(raw map[string][]string) *PermissionSet {
 }
 
 // Can menjawab satu pertanyaan: apakah role ini memiliki permission itu.
-// Prinsip fail closed: bila ragu/tidak ada, kembalikan false.
+//
+// Perhatikan perilakunya ketika role atau permission tidak dikenal:
+// jawabannya SELALU false. Prinsipnya disebut fail closed.
 func (p *PermissionSet) Can(role, permission string) bool {
 	if p == nil {
 		return false
@@ -34,7 +38,8 @@ func (p *PermissionSet) Can(role, permission string) bool {
 	return granted
 }
 
-// PermissionsOf mengembalikan seluruh permission milik sebuah role.
+// PermissionsOf mengembalikan seluruh permission milik sebuah role,
+// terurut, untuk ditampilkan pada endpoint profil.
 func (p *PermissionSet) PermissionsOf(role string) []string {
 	result := []string{}
 	if p == nil {
@@ -47,7 +52,7 @@ func (p *PermissionSet) PermissionsOf(role string) []string {
 	return result
 }
 
-// KnownRoles mengembalikan daftar role yang dikenal sistem.
+// KnownRoles mengembalikan daftar role yang dikenal sistem, terurut.
 func (p *PermissionSet) KnownRoles() []string {
 	result := []string{}
 	if p == nil {
